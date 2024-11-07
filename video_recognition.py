@@ -114,6 +114,8 @@ def detect_emotions_and_pose(video_path, output_path, report_path):
         for contour in contours:
             if cv2.contourArea(contour) > area_threshold:
                 counter_sudden_movements_detected += 1
+                (xC, yC, wC, hC) = cv2.boundingRect(contour)
+                cv2.rectangle(frame, (xC, yC), (xC + wC, yC + hC), (0, 0, 255), 2)
         
         # Detecta rostos no frame
         faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
@@ -151,8 +153,8 @@ def detect_emotions_and_pose(video_path, output_path, report_path):
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
 
-input_video_path = os.path.join(script_dir, 'videos_input/top_model_video.mp4')  # Substitua 'meu_video.mp4' pelo nome do seu vídeo
-# input_video_path = os.path.join(script_dir, 'videos_input/video.mp4')  # Substitua 'meu_video.mp4' pelo nome do seu vídeo
+# input_video_path = os.path.join(script_dir, 'videos_input/top_model_video.mp4')  # Substitua 'meu_video.mp4' pelo nome do seu vídeo
+input_video_path = os.path.join(script_dir, 'videos_input/video.mp4')  # Substitua 'meu_video.mp4' pelo nome do seu vídeo
 output_video_path = os.path.join(script_dir, 'output/detect_expressions_output_video.mp4')  # Nome do vídeo de saída
 output_report_path = os.path.join(script_dir, 'output/detect_expressions_output_video_report.txt')  # Nome do arquivo de analise do video de saída
 
