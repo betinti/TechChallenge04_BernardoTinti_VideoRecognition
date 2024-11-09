@@ -1,0 +1,5 @@
+Total de frames analisados: 424
+Principais emocoes detectadas: fear, neutral, sad, happy, surprise, disgust
+Numero de rostos reconhecidos: 425
+Gestos de mao detectadas: Hand Waving, Thumbs Up
+Posicoes corporais detectadas: Sitting

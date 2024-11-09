@@ -4,35 +4,109 @@ from deepface import DeepFace
 import os
 from tqdm import tqdm
 
+# Globals
+mp_pose = mp.solutions.pose
+mp_drawing = mp.solutions.drawing_utils
+mp_drawing_styles = mp.solutions.drawing_styles
+mp_holistic = mp.solutions.holistic
+mp_face_detection = mp.solutions.face_detection
+
 def escrever_relatorio(filePath, report):
     report_file = open(filePath, "w")
     report_file.write(report)
     report_file.close()
 
-def montar_relatorio(filePath, frameCount, anomalyCount, emotionsList, counterSuddenMovementsDetected):
-    report_str = ""
-    report_str += "Total de frames analisados: {}\n".format(frameCount)
-    report_str += "Total de mãos erguidas contabilizadas: {}\n".format(anomalyCount)
-    report_str += "Principais emoções detectadas: {}\n".format(", ".join(emotionsList))
-    report_str += "Total de movimentos bruscos detectados: {}\n".format(counterSuddenMovementsDetected)
-    escrever_relatorio(filePath, report_str)
+def montar_relatorio(file_path, result_dict):
+    reportStr = ""
+    
+    for key, value in result_dict.items():
+        if isinstance(value, str):
+            reportStr += f"{key}: {value}\n"
+        elif isinstance(value, list) and len(value)>0:
+            reportStr += f"{key}: {", ".join(value)}\n"
+        elif  (isinstance(value, int) or isinstance(value, float)) and value > 0:
+            reportStr += f"{key}: {str(value)}\n"
+            
+    escrever_relatorio(file_path, reportStr)
 
-def detect_emotions_and_pose(video_path, output_path, report_path):
+# Define gesture recognition function
+def recognize_gesture(landmarks):
+    # Analyze landmarks and return gesture label
+    # Thumbs Up
+    if (landmarks[mp_holistic.HandLandmark.THUMB_TIP].y < landmarks[mp_holistic.HandLandmark.WRIST].y and
+        landmarks[mp_holistic.HandLandmark.INDEX_FINGER_TIP].y < landmarks[mp_holistic.HandLandmark.THUMB_TIP].y):
+        return "Thumbs Up"
+    # Hand Waving (movement of hand)
+    elif landmarks[mp_holistic.HandLandmark.WRIST].visibility < 0.9:
+        return "Hand Waving"
+    # Peace Sign (index and middle fingers spread)
+    elif (landmarks[mp_holistic.HandLandmark.INDEX_FINGER_TIP].y > landmarks[mp_holistic.HandLandmark.MIDDLE_FINGER_TIP].y and
+          landmarks[mp_holistic.HandLandmark.THUMB_TIP].y > landmarks[mp_holistic.HandLandmark.INDEX_FINGER_TIP].y):
+        return "Peace Sign"
+    # Pointing (index finger extended)
+    elif landmarks[mp_holistic.HandLandmark.INDEX_FINGER_TIP].visibility > 0.9:
+        return "Pointing"
+    # Counting fingers
+    else:
+        # Count number of visible finger tips
+        visible_fingers = sum(1 for lm in landmarks if lm.visibility > 0.9)
+        return f"{visible_fingers} Finger(s)"
+
+# Define posture recognition function
+def recognize_posture(pose_landmarks):
+    # Analyze pose landmarks and return posture label
+    # For simplicity, we'll check the position of the hips to determine sitting or standing
+    # If the y-coordinate of the hip landmarks is above a certain threshold, consider it standing; otherwise, sitting
+    hip_landmarks = [pose_landmarks.landmark[i] for i in [mp_pose.PoseLandmark.LEFT_HIP.value, mp_pose.PoseLandmark.RIGHT_HIP.value]]
+    if all(hip.y > 0.7 for hip in hip_landmarks):
+        return "Sitting"
+    else:
+        return "Standing"
+
+# Função para verificar se o braço está levantado
+def is_arm_up(landmarks):
+    left_eye = landmarks[mp_pose.PoseLandmark.LEFT_EYE.value]
+    right_eye = landmarks[mp_pose.PoseLandmark.RIGHT_EYE.value]
+    left_elbow = landmarks[mp_pose.PoseLandmark.LEFT_ELBOW.value]
+    right_elbow = landmarks[mp_pose.PoseLandmark.RIGHT_ELBOW.value]
+
+    left_arm_up = left_elbow.y < left_eye.y
+    right_arm_up = right_elbow.y < right_eye.y
+
+    return left_arm_up or right_arm_up
+
+def handle_videos_paths(input_video_full_path):
+    
+    # Get only the name of the file without the extension
+    videoName = os.path.splitext(os.path.basename(input_video_full_path))[0]
+    
+    # Caminho para a mesma pasta do script
+    outpuPath = os.path.join(os.path.dirname(os.path.abspath(__file__)), f'output/{videoName}')
+    os.makedirs(outpuPath, exist_ok=True)
+    
+    ouputPath_Report = os.path.join(outpuPath, f'{videoName}_report.txt')
+    ouputPath_Video = os.path.join(outpuPath, f'{videoName}_analyzed_video.mp4')
+    return ouputPath_Report, ouputPath_Video
+    
+
+def detect_emotions_and_pose(video_path):
+    
+    outputReport_path, outputVideo_path = handle_videos_paths(video_path)
+    
     # Carrega o classificador de rosto pré-treinado do OpenCV
     face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-    
-    # Parametros para definir a detecção de movimentos brusos
-    threshold = 50
-    area_threshold = 500
     
     # Iniciando os contadores para o relatório final
     arm_movements_count = 0
     detectes_emotions_list = []
-    counter_sudden_movements_detected = 0
+    detectes_hand_gestures = []
+    detectes_postures = []
+    detectes_faces_count = 0
     
     # Inicializar o MediaPipe Pose
-    mp_pose = mp.solutions.pose
-    pose = mp_pose.Pose()
+    pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
+    holistic = mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=0.5)
+    face_detection = mp_face_detection.FaceDetection(min_detection_confidence=0.5)
     mp_drawing = mp.solutions.drawing_utils
 
     # Capturar vídeo do arquivo especificado
@@ -51,12 +125,7 @@ def detect_emotions_and_pose(video_path, output_path, report_path):
     
     # Definir o codec e criar o objeto VideoWriter
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Codec para MP4
-    out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
-    
-    # Get the first frame to analyse
-    _, prev_frame = cap.read()
-    prev_frame = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
-    prev_frame = cv2.GaussianBlur(prev_frame, (5, 5), 0)
+    out = cv2.VideoWriter(outputVideo_path, fourcc, fps, (width, height))
 
     # Loop para processar cada frame do vídeo
     for _ in tqdm(range(total_frames), desc="Processando vídeo"):
@@ -71,52 +140,58 @@ def detect_emotions_and_pose(video_path, output_path, report_path):
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         
         # Processar o frame para detectar a pose
-        results_pose = pose.process(rgb_frame)
+        frame.flags.writeable = False
+        pose_results = pose.process(rgb_frame)
+        holistic_results = holistic.process(rgb_frame)
+        face_results = face_detection.process(rgb_frame)
 
-        # Função para verificar se o braço está levantado
-        def is_arm_up(landmarks):
-            left_eye = landmarks[mp_pose.PoseLandmark.LEFT_EYE.value]
-            right_eye = landmarks[mp_pose.PoseLandmark.RIGHT_EYE.value]
-            left_elbow = landmarks[mp_pose.PoseLandmark.LEFT_ELBOW.value]
-            right_elbow = landmarks[mp_pose.PoseLandmark.RIGHT_ELBOW.value]
-
-            left_arm_up = left_elbow.y < left_eye.y
-            right_arm_up = right_elbow.y < right_eye.y
-
-            return left_arm_up or right_arm_up
+        # Draw pose and hand landmarks on the image
+        frame.flags.writeable = True
+        frame = cv2.cvtColor(rgb_frame, cv2.COLOR_RGB2BGR)
+        if pose_results.pose_landmarks:
+            mp_drawing.draw_landmarks(
+                frame, pose_results.pose_landmarks, mp_pose.POSE_CONNECTIONS,
+                landmark_drawing_spec=mp_drawing_styles.get_default_pose_landmarks_style())
+        if holistic_results.left_hand_landmarks:
+            mp_drawing.draw_landmarks(
+                frame, holistic_results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS,
+                landmark_drawing_spec=mp_drawing_styles.get_default_hand_landmarks_style())
+        if holistic_results.right_hand_landmarks:
+            mp_drawing.draw_landmarks(
+                frame, holistic_results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS,
+                landmark_drawing_spec=mp_drawing_styles.get_default_hand_landmarks_style())
         
         # Desenhar as anotações da pose no frame
-        if results_pose.pose_landmarks:
-            mp_drawing.draw_landmarks(frame, results_pose.pose_landmarks, mp_pose.POSE_CONNECTIONS)
-            
+        if pose_results.pose_landmarks:
             # Verificar se o braço está levantado
-            if is_arm_up(results_pose.pose_landmarks.landmark):
+            if is_arm_up(pose_results.pose_landmarks.landmark):
                 if not arm_up:
                     arm_up = True
                     arm_movements_count += 1
             else:
                 arm_up = False
+                
+        # Recognize gesture
+        if holistic_results.right_hand_landmarks:
+            gesture = recognize_gesture(holistic_results.right_hand_landmarks.landmark)
+            if gesture not in detectes_hand_gestures:
+                detectes_hand_gestures.append(gesture)
+
+        # Recognize posture
+        if pose_results.pose_landmarks:
+            posture = recognize_posture(pose_results.pose_landmarks)
+            if posture not in detectes_postures:
+                detectes_postures.append(posture)
+
+        # Count faces detected
+        if face_results.detections:
+            num_faces = len(face_results.detections)
+            detectes_faces_count += num_faces
 
         # Converte o frame para escala de cinza para detecção de rosto
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         gray = cv2.equalizeHist(gray)
-        gray = cv2.GaussianBlur(gray, (5, 5), 0)
 
-        # Calculate absolute difference between current frame and previous frame
-        frame_diff = cv2.absdiff(prev_frame, gray)
-
-        # Thresholding to highlight significant differences
-        _, thresh = cv2.threshold(frame_diff, threshold, 255, cv2.THRESH_BINARY)
-
-        # Finding contours to detect regions with large movement
-        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
-        for contour in contours:
-            if cv2.contourArea(contour) > area_threshold:
-                counter_sudden_movements_detected += 1
-                (xC, yC, wC, hC) = cv2.boundingRect(contour)
-                cv2.rectangle(frame, (xC, yC), (xC + wC, yC + hC), (0, 0, 255), 2)
-        
         # Detecta rostos no frame
         faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
 
@@ -141,8 +216,18 @@ def detect_emotions_and_pose(video_path, output_path, report_path):
         # Escrever o frame processado no vídeo de saída
         out.write(frame)
 
+    # Criando um dicionario para imprimir os resultados
+    resultsToReport = {
+        "Total de frames analisados": total_frames,
+        "Total de maos erguidas contabilizadas": arm_movements_count,
+        "Principais emocoes detectadas": detectes_emotions_list,
+        "Numero de rostos reconhecidos": detectes_faces_count,
+        "Gestos de mao detectadas": detectes_hand_gestures,
+        "Posicoes corporais detectadas": detectes_postures
+    }
+    
     # Escrever relatorio com as informações coletadas no video
-    montar_relatorio(report_path, total_frames, arm_movements_count, detectes_emotions_list, counter_sudden_movements_detected)
+    montar_relatorio(outputReport_path, resultsToReport)
 
     # Liberar a captura de vídeo e fechar todas as janelas
     cap.release()
@@ -152,11 +237,5 @@ def detect_emotions_and_pose(video_path, output_path, report_path):
 # Caminho para o arquivo de vídeo na mesma pasta do script
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
-
-# input_video_path = os.path.join(script_dir, 'videos_input/top_model_video.mp4')  # Substitua 'meu_video.mp4' pelo nome do seu vídeo
-input_video_path = os.path.join(script_dir, 'videos_input/video.mp4')  # Substitua 'meu_video.mp4' pelo nome do seu vídeo
-output_video_path = os.path.join(script_dir, 'output/detect_expressions_output_video.mp4')  # Nome do vídeo de saída
-output_report_path = os.path.join(script_dir, 'output/detect_expressions_output_video_report.txt')  # Nome do arquivo de analise do video de saída
-
 # Chamar a função para detectar emoções no vídeo e salvar o vídeo processado
-detect_emotions_and_pose(input_video_path, output_video_path, output_report_path)
+detect_emotions_and_pose(os.path.join(script_dir, 'videos_input/teste_movimentos.mp4'))

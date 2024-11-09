@@ -1,4 +1,3 @@
-Total de frames analisados: 3326
-Total de mãos erguidas contabilizadas: 14
-Principais emoções detectadas: fear, angry, happy, sad, neutral, surprise, disgust
-Total de movimentos bruscos detectados: 109474
+Total de frames analisados: 424
+Principais emocoes detectadas: fear, neutral, sad, happy, surprise, angry
+Fim do relatorio
