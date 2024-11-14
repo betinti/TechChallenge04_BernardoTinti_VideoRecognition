@@ -75,6 +75,19 @@ def is_arm_up(landmarks):
 
     return left_arm_up or right_arm_up
 
+def recognize_T_posture(landmarks):
+    left_eye = landmarks[mp_pose.PoseLandmark.LEFT_EYE.value]
+    right_eye = landmarks[mp_pose.PoseLandmark.RIGHT_EYE.value]
+    left_shoulder = landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value]
+    right_shoulder = landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value]
+    left_wrist = landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value]
+    right_wrist = landmarks[mp_pose.PoseLandmark.RIGHT_WRIST.value]
+    
+    left_t = left_wrist.y < left_shoulder.y and left_wrist.y > left_eye.y
+    right_t = right_wrist.y < right_shoulder.y  and right_wrist.y > right_eye.y
+    
+    return left_t and right_t
+
 def handle_videos_paths(input_video_full_path):
     
     # Get only the name of the file without the extension
@@ -98,15 +111,16 @@ def detect_emotions_and_pose(video_path):
     
     # Iniciando os contadores para o relatório final
     arm_movements_count = 0
+    t_posture_count = 0
     detectes_emotions_list = []
     detectes_hand_gestures = []
     detectes_postures = []
-    detectes_faces_count = 0
+    t_posture  = False
+    arm_up  = False
     
     # Inicializar o MediaPipe Pose
     pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
     holistic = mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=0.5)
-    face_detection = mp_face_detection.FaceDetection(min_detection_confidence=0.5)
     mp_drawing = mp.solutions.drawing_utils
 
     # Capturar vídeo do arquivo especificado
@@ -135,65 +149,9 @@ def detect_emotions_and_pose(video_path):
         # Se não conseguiu ler o frame (final do vídeo), sair do loop
         if not ret:
             break
-
-        # Converter o frame para RGB
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         
-        # Processar o frame para detectar a pose
-        frame.flags.writeable = False
-        pose_results = pose.process(rgb_frame)
-        holistic_results = holistic.process(rgb_frame)
-        face_results = face_detection.process(rgb_frame)
-
-        # Draw pose and hand landmarks on the image
-        frame.flags.writeable = True
-        frame = cv2.cvtColor(rgb_frame, cv2.COLOR_RGB2BGR)
-        if pose_results.pose_landmarks:
-            mp_drawing.draw_landmarks(
-                frame, pose_results.pose_landmarks, mp_pose.POSE_CONNECTIONS,
-                landmark_drawing_spec=mp_drawing_styles.get_default_pose_landmarks_style())
-        if holistic_results.left_hand_landmarks:
-            mp_drawing.draw_landmarks(
-                frame, holistic_results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS,
-                landmark_drawing_spec=mp_drawing_styles.get_default_hand_landmarks_style())
-        if holistic_results.right_hand_landmarks:
-            mp_drawing.draw_landmarks(
-                frame, holistic_results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS,
-                landmark_drawing_spec=mp_drawing_styles.get_default_hand_landmarks_style())
-        
-        # Desenhar as anotações da pose no frame
-        if pose_results.pose_landmarks:
-            # Verificar se o braço está levantado
-            if is_arm_up(pose_results.pose_landmarks.landmark):
-                if not arm_up:
-                    arm_up = True
-                    arm_movements_count += 1
-            else:
-                arm_up = False
-                
-        # Recognize gesture
-        if holistic_results.right_hand_landmarks:
-            gesture = recognize_gesture(holistic_results.right_hand_landmarks.landmark)
-            if gesture not in detectes_hand_gestures:
-                detectes_hand_gestures.append(gesture)
-
-        # Recognize posture
-        if pose_results.pose_landmarks:
-            posture = recognize_posture(pose_results.pose_landmarks)
-            if posture not in detectes_postures:
-                detectes_postures.append(posture)
-
-        # Count faces detected
-        if face_results.detections:
-            num_faces = len(face_results.detections)
-            detectes_faces_count += num_faces
-
-        # Converte o frame para escala de cinza para detecção de rosto
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        gray = cv2.equalizeHist(gray)
-
         # Detecta rostos no frame
-        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+        faces = face_cascade.detectMultiScale(frame, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
 
         # Iterar sobre cada face detectada
         for x, y, w, h in faces:
@@ -212,7 +170,60 @@ def detect_emotions_and_pose(video_path):
             
             # Escrever a emoção dominante acima da face
             cv2.putText(frame, dominant_emotion, (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
+
+        # Converter o frame para RGB
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         
+        # Processar o frame para detectar a pose
+        frame.flags.writeable = False
+        pose_results = pose.process(rgb_frame)
+        holistic_results = holistic.process(rgb_frame)
+
+        # Draw pose and hand landmarks on the image
+        frame.flags.writeable = True
+        frame = cv2.cvtColor(rgb_frame, cv2.COLOR_RGB2BGR)
+        
+        if pose_results.pose_landmarks:
+            mp_drawing.draw_landmarks(
+                frame, pose_results.pose_landmarks, mp_pose.POSE_CONNECTIONS,
+                landmark_drawing_spec=mp_drawing_styles.get_default_pose_landmarks_style())
+            
+            # Verificar se o braço está levantado
+            if is_arm_up(pose_results.pose_landmarks.landmark):
+                arm_movements_count += 1
+                if not arm_up:
+                    arm_up = True
+            else:
+                arm_up = False
+                
+            # Verificar se existe posição dos braços em T
+            if recognize_T_posture(pose_results.pose_landmarks.landmark):
+                if not t_posture:
+                    t_posture = True
+                    t_posture_count += 1
+            else:
+                t_posture = False
+            
+            posture = recognize_posture(pose_results.pose_landmarks)
+            if posture not in detectes_postures:
+                detectes_postures.append(posture)
+                
+        if holistic_results.left_hand_landmarks:
+            mp_drawing.draw_landmarks(
+                frame, holistic_results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS,
+                landmark_drawing_spec=mp_drawing_styles.get_default_hand_landmarks_style())
+            
+        if holistic_results.right_hand_landmarks:
+            mp_drawing.draw_landmarks(
+                frame, holistic_results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS,
+                landmark_drawing_spec=mp_drawing_styles.get_default_hand_landmarks_style())
+                
+        # Recognize gesture
+        if holistic_results.right_hand_landmarks:
+            gesture = recognize_gesture(holistic_results.right_hand_landmarks.landmark)
+            if gesture not in detectes_hand_gestures:
+                detectes_hand_gestures.append(gesture)
+
         # Escrever o frame processado no vídeo de saída
         out.write(frame)
 
@@ -221,9 +232,10 @@ def detect_emotions_and_pose(video_path):
         "Total de frames analisados": total_frames,
         "Total de maos erguidas contabilizadas": arm_movements_count,
         "Principais emocoes detectadas": detectes_emotions_list,
-        "Numero de rostos reconhecidos": detectes_faces_count,
+        "Quantidade de emocoes detectadas": len(detectes_emotions_list),
         "Gestos de mao detectadas": detectes_hand_gestures,
-        "Posicoes corporais detectadas": detectes_postures
+        "Posicoes corporais detectadas": detectes_postures,
+        "Posicao dos bracos em T": t_posture_count
     }
     
     # Escrever relatorio com as informações coletadas no video
@@ -238,4 +250,6 @@ def detect_emotions_and_pose(video_path):
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
 # Chamar a função para detectar emoções no vídeo e salvar o vídeo processado
-detect_emotions_and_pose(os.path.join(script_dir, 'videos_input/teste_movimentos.mp4'))
+# detect_emotions_and_pose(os.path.join(script_dir, 'videos_input/cadeira_teste.mp4'))
+# detect_emotions_and_pose(os.path.join(script_dir, 'videos_input/big_t_body_test.mp4'))
+detect_emotions_and_pose(os.path.join(script_dir, 'videos_input/video.mp4'))

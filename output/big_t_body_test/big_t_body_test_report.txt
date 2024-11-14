@@ -1,0 +1,7 @@
+Total de frames analisados: 199
+Total de maos erguidas contabilizadas: 5
+Principais emocoes detectadas: neutral, happy, sad, fear, angry
+Quantidade de emocoes detectadas: 5
+Gestos de mao detectadas: Thumbs Up, Hand Waving
+Posicoes corporais detectadas: Sitting
+Posicao dos bracos em T: 2
