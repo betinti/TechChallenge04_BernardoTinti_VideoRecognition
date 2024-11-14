@@ -5,3 +5,4 @@ Quantidade de emocoes detectadas: 5
 Gestos de mao detectadas: Thumbs Up, Hand Waving
 Posicoes corporais detectadas: Sitting
 Posicao dos bracos em T: 2
+Movimentos anomalos: 160

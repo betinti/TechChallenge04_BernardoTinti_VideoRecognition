@@ -11,11 +11,13 @@ mp_drawing_styles = mp.solutions.drawing_styles
 mp_holistic = mp.solutions.holistic
 mp_face_detection = mp.solutions.face_detection
 
+#  Escreve o relatorio em um arquivo .txt
 def escrever_relatorio(filePath, report):
     report_file = open(filePath, "w")
     report_file.write(report)
     report_file.close()
 
+# Monta o texto a ser escrito no relatorio 
 def montar_relatorio(file_path, result_dict):
     reportStr = ""
     
@@ -75,6 +77,7 @@ def is_arm_up(landmarks):
 
     return left_arm_up or right_arm_up
 
+# Função para verificar se o pulso está entre os olhos e os ombros (posição de T com as mãos)
 def recognize_T_posture(landmarks):
     left_eye = landmarks[mp_pose.PoseLandmark.LEFT_EYE.value]
     right_eye = landmarks[mp_pose.PoseLandmark.RIGHT_EYE.value]
@@ -88,6 +91,7 @@ def recognize_T_posture(landmarks):
     
     return left_t and right_t
 
+# Creates an output folder based on the input video's name and returns paths for a report
 def handle_videos_paths(input_video_full_path):
     
     # Get only the name of the file without the extension
@@ -110,6 +114,7 @@ def detect_emotions_and_pose(video_path):
     face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
     
     # Iniciando os contadores para o relatório final
+    counter_sudden_movements_detected = 0
     arm_movements_count = 0
     t_posture_count = 0
     detectes_emotions_list = []
@@ -117,6 +122,10 @@ def detect_emotions_and_pose(video_path):
     detectes_postures = []
     t_posture  = False
     arm_up  = False
+    
+    # Parametros para definir a detecção de movimentos brusos
+    threshold = 100
+    area_threshold = 1000
     
     # Inicializar o MediaPipe Pose
     pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
@@ -140,6 +149,11 @@ def detect_emotions_and_pose(video_path):
     # Definir o codec e criar o objeto VideoWriter
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Codec para MP4
     out = cv2.VideoWriter(outputVideo_path, fourcc, fps, (width, height))
+
+    # Get the first frame to analyse
+    _, prev_frame = cap.read()
+    prev_frame = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
+    prev_frame = cv2.GaussianBlur(prev_frame, (5, 5), 0)
 
     # Loop para processar cada frame do vídeo
     for _ in tqdm(range(total_frames), desc="Processando vídeo"):
@@ -223,6 +237,29 @@ def detect_emotions_and_pose(video_path):
             gesture = recognize_gesture(holistic_results.right_hand_landmarks.landmark)
             if gesture not in detectes_hand_gestures:
                 detectes_hand_gestures.append(gesture)
+                
+         # Converte o frame para escala de cinza para detecção de rosto
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        gray = cv2.equalizeHist(gray)
+        gray = cv2.GaussianBlur(gray, (5, 5), 0)
+        
+        # Calculate absolute difference between current frame and previous frame
+        frame_diff = cv2.absdiff(prev_frame, gray)
+        
+        # Thresholding to highlight significant differences
+        _, thresh = cv2.threshold(frame_diff, threshold, 255, cv2.THRESH_BINARY)
+        
+        # Finding contours to detect regions with large movement
+        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        for contour in contours:
+            if cv2.contourArea(contour) > area_threshold:
+                counter_sudden_movements_detected += 1
+                (xT, yT, wT, hT) = cv2.boundingRect(contour)
+                cv2.rectangle(frame, (xT, yT), (xT + wT, yT + hT), (0, 255, 0), 2)
+                
+        # Update previous frame
+        prev_frame = gray
 
         # Escrever o frame processado no vídeo de saída
         out.write(frame)
@@ -235,7 +272,8 @@ def detect_emotions_and_pose(video_path):
         "Quantidade de emocoes detectadas": len(detectes_emotions_list),
         "Gestos de mao detectadas": detectes_hand_gestures,
         "Posicoes corporais detectadas": detectes_postures,
-        "Posicao dos bracos em T": t_posture_count
+        "Posicao dos bracos em T": t_posture_count,
+        "Movimentos anomalos": counter_sudden_movements_detected
     }
     
     # Escrever relatorio com as informações coletadas no video
@@ -251,5 +289,6 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 
 # Chamar a função para detectar emoções no vídeo e salvar o vídeo processado
 # detect_emotions_and_pose(os.path.join(script_dir, 'videos_input/cadeira_teste.mp4'))
+detect_emotions_and_pose(os.path.join(script_dir, 'videos_input/teste_movimentos.mp4'))
 # detect_emotions_and_pose(os.path.join(script_dir, 'videos_input/big_t_body_test.mp4'))
-detect_emotions_and_pose(os.path.join(script_dir, 'videos_input/video.mp4'))
+# detect_emotions_and_pose(os.path.join(script_dir, 'videos_input/video.mp4'))
