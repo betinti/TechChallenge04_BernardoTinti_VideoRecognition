@@ -19,6 +19,7 @@ def escrever_relatorio(filePath, report):
 
 # Monta o texto a ser escrito no relatorio 
 def montar_relatorio(file_path, result_dict):
+    # Converte um dicionário de resultados em um formato textual organizado para o relatório.
     reportStr = ""
     
     for key, value in result_dict.items():
@@ -31,42 +32,49 @@ def montar_relatorio(file_path, result_dict):
             
     escrever_relatorio(file_path, reportStr)
 
-# Define gesture recognition function
+# Função para reconhecer gestos com base nos pontos de referência das mãos
 def recognize_gesture(landmarks):
-    # Analyze landmarks and return gesture label
-    # Thumbs Up
+    """
+    Analisa os pontos de referência das mãos para identificar gestos específicos.
+    Retorna o nome do gesto detectado.
+    """
+    # Dedão para cima
     if (landmarks[mp_holistic.HandLandmark.THUMB_TIP].y < landmarks[mp_holistic.HandLandmark.WRIST].y and
         landmarks[mp_holistic.HandLandmark.INDEX_FINGER_TIP].y < landmarks[mp_holistic.HandLandmark.THUMB_TIP].y):
-        return "Thumbs Up"
-    # Hand Waving (movement of hand)
+        return "Dedao para cima"
+    # Aceno de mão (movimento da mão)
     elif landmarks[mp_holistic.HandLandmark.WRIST].visibility < 0.9:
-        return "Hand Waving"
-    # Peace Sign (index and middle fingers spread)
+        return "Aceno de mao"
+    # Sinal de paz (dedo indicador e médio afastados)
     elif (landmarks[mp_holistic.HandLandmark.INDEX_FINGER_TIP].y > landmarks[mp_holistic.HandLandmark.MIDDLE_FINGER_TIP].y and
           landmarks[mp_holistic.HandLandmark.THUMB_TIP].y > landmarks[mp_holistic.HandLandmark.INDEX_FINGER_TIP].y):
-        return "Peace Sign"
-    # Pointing (index finger extended)
+        return "Sinal de paz"
+    # Apontando (dedo indicador estendido)
     elif landmarks[mp_holistic.HandLandmark.INDEX_FINGER_TIP].visibility > 0.9:
-        return "Pointing"
-    # Counting fingers
+        return "Apontando"
+    # Contando dedos
     else:
-        # Count number of visible finger tips
+        # Conta o número de dedos visíveis
         visible_fingers = sum(1 for lm in landmarks if lm.visibility > 0.9)
-        return f"{visible_fingers} Finger(s)"
+        return f"{visible_fingers} Dedo(s)"
 
-# Define posture recognition function
+# Função para reconhecer posturas corporais
 def recognize_posture(pose_landmarks):
-    # Analyze pose landmarks and return posture label
-    # For simplicity, we'll check the position of the hips to determine sitting or standing
-    # If the y-coordinate of the hip landmarks is above a certain threshold, consider it standing; otherwise, sitting
+    """
+    Analisa os pontos de referência do corpo para identificar a postura (sentado ou em pé).
+    Baseia-se na posição dos quadris.
+    """
     hip_landmarks = [pose_landmarks.landmark[i] for i in [mp_pose.PoseLandmark.LEFT_HIP.value, mp_pose.PoseLandmark.RIGHT_HIP.value]]
     if all(hip.y > 0.7 for hip in hip_landmarks):
-        return "Sitting"
+        return "Sentado"
     else:
-        return "Standing"
+        return "Em pe"
 
 # Função para verificar se o braço está levantado
 def is_arm_up(landmarks):
+    """
+    Verifica se um dos braços está levantado com base na posição do cotovelo em relação aos olhos.
+    """
     left_eye = landmarks[mp_pose.PoseLandmark.LEFT_EYE.value]
     right_eye = landmarks[mp_pose.PoseLandmark.RIGHT_EYE.value]
     left_elbow = landmarks[mp_pose.PoseLandmark.LEFT_ELBOW.value]
@@ -77,8 +85,11 @@ def is_arm_up(landmarks):
 
     return left_arm_up or right_arm_up
 
-# Função para verificar se o pulso está entre os olhos e os ombros (posição de T com as mãos)
+# Função para verificar a postura de "T" (braços em posição de T)
 def recognize_T_posture(landmarks):
+    """
+    Detecta se os braços estão em posição de T, ou seja, entre os olhos e os ombros.
+    """
     left_eye = landmarks[mp_pose.PoseLandmark.LEFT_EYE.value]
     right_eye = landmarks[mp_pose.PoseLandmark.RIGHT_EYE.value]
     left_shoulder = landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value]
@@ -91,10 +102,13 @@ def recognize_T_posture(landmarks):
     
     return left_t and right_t
 
-# Creates an output folder based on the input video's name and returns paths for a report
+# Cria pastas de saída com base no nome do vídeo de entrada
 def handle_videos_paths(input_video_full_path):
+    """
+    Cria pastas de saída e retorna os caminhos para o relatório e o vídeo processado.
+    """
     
-    # Get only the name of the file without the extension
+    # Obtenha apenas o nome do arquivo sem a extensão
     videoName = os.path.splitext(os.path.basename(input_video_full_path))[0]
     
     # Caminho para a mesma pasta do script
@@ -107,6 +121,10 @@ def handle_videos_paths(input_video_full_path):
     
 
 def detect_emotions_and_pose(video_path, optimized = False):
+    """
+    Processa o vídeo de entrada para detectar emoções, gestos, posturas corporais e movimentos bruscos.
+    Gera um relatório com os resultados e salva um vídeo processado.
+    """
     
     outputReport_path, outputVideo_path = handle_videos_paths(video_path)
     
@@ -154,7 +172,7 @@ def detect_emotions_and_pose(video_path, optimized = False):
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Codec para MP4
     out = cv2.VideoWriter(outputVideo_path, fourcc, fps, (width, height))
 
-    # Get the first frame to analyse
+    # Obtenha o primeiro quadro para analisar
     _, prev_frame = cap.read()
     prev_frame = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
     prev_frame = cv2.GaussianBlur(prev_frame, (5, 5), 0)
@@ -203,7 +221,7 @@ def detect_emotions_and_pose(video_path, optimized = False):
             pose_results = pose.process(rgb_frame)
             holistic_results = holistic.process(rgb_frame)
 
-            # Draw pose and hand landmarks on the image
+            # Desenhe a pose e os pontos de referência das mãos na imagem
             frame.flags.writeable = True
             frame = cv2.cvtColor(rgb_frame, cv2.COLOR_RGB2BGR)
             
@@ -242,7 +260,7 @@ def detect_emotions_and_pose(video_path, optimized = False):
                     frame, holistic_results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS,
                     landmark_drawing_spec=mp_drawing_styles.get_default_hand_landmarks_style())
                     
-            # Recognize gesture
+            # Reconhecer gestos
             if holistic_results.right_hand_landmarks:
                 gesture = recognize_gesture(holistic_results.right_hand_landmarks.landmark)
                 if gesture not in detectes_hand_gestures:
