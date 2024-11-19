@@ -106,7 +106,7 @@ def handle_videos_paths(input_video_full_path):
     return ouputPath_Report, ouputPath_Video
     
 
-def detect_emotions_and_pose(video_path):
+def detect_emotions_and_pose(video_path, optimized = False):
     
     outputReport_path, outputVideo_path = handle_videos_paths(video_path)
     
@@ -122,6 +122,10 @@ def detect_emotions_and_pose(video_path):
     detectes_postures = []
     t_posture  = False
     arm_up  = False
+    sudden_movements_detected = False
+    total_frame_counter = 0
+    total_frame_analyzed = 0
+    intervalo_entre_frames = 15
     
     # Parametros para definir a detecção de movimentos brusos
     threshold = 100
@@ -164,109 +168,120 @@ def detect_emotions_and_pose(video_path):
         if not ret:
             break
         
-        # Detecta rostos no frame
-        faces = face_cascade.detectMultiScale(frame, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+        total_frame_counter += 1
+        
+        if (not optimized) or (total_frame_counter % intervalo_entre_frames == 0):
+            
+            total_frame_analyzed += 1
+            
+            # Detecta rostos no frame
+            faces = face_cascade.detectMultiScale(frame, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
 
-        # Iterar sobre cada face detectada
-        for x, y, w, h in faces:
-            # Obter a emoção dominante
-            face = frame[y:y+h, x:x+w]
-            
-            # Analisar o frame para detectar faces e expressões
-            result = DeepFace.analyze(face, actions=['emotion'], enforce_detection=False)
-            dominant_emotion = result[0]['dominant_emotion']
-            
-            if dominant_emotion not in detectes_emotions_list:
-                detectes_emotions_list.append(dominant_emotion)
-            
-            # Desenhar um retângulo ao redor da face
-            cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
-            
-            # Escrever a emoção dominante acima da face
-            cv2.putText(frame, dominant_emotion, (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
+            # Iterar sobre cada face detectada
+            for x, y, w, h in faces:
+                # Obter a emoção dominante
+                face = frame[y:y+h, x:x+w]
+                
+                # Analisar o frame para detectar faces e expressões
+                result = DeepFace.analyze(face, actions=['emotion'], enforce_detection=False)
+                dominant_emotion = result[0]['dominant_emotion']
+                
+                if dominant_emotion not in detectes_emotions_list:
+                    detectes_emotions_list.append(dominant_emotion)
+                
+                # Desenhar um retângulo ao redor da face
+                cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+                
+                # Escrever a emoção dominante acima da face
+                cv2.putText(frame, dominant_emotion, (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
 
-        # Converter o frame para RGB
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        
-        # Processar o frame para detectar a pose
-        frame.flags.writeable = False
-        pose_results = pose.process(rgb_frame)
-        holistic_results = holistic.process(rgb_frame)
+            # Converter o frame para RGB
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            
+            # Processar o frame para detectar a pose
+            frame.flags.writeable = False
+            pose_results = pose.process(rgb_frame)
+            holistic_results = holistic.process(rgb_frame)
 
-        # Draw pose and hand landmarks on the image
-        frame.flags.writeable = True
-        frame = cv2.cvtColor(rgb_frame, cv2.COLOR_RGB2BGR)
-        
-        if pose_results.pose_landmarks:
-            mp_drawing.draw_landmarks(
-                frame, pose_results.pose_landmarks, mp_pose.POSE_CONNECTIONS,
-                landmark_drawing_spec=mp_drawing_styles.get_default_pose_landmarks_style())
+            # Draw pose and hand landmarks on the image
+            frame.flags.writeable = True
+            frame = cv2.cvtColor(rgb_frame, cv2.COLOR_RGB2BGR)
             
-            # Verificar se o braço está levantado
-            if is_arm_up(pose_results.pose_landmarks.landmark):
-                arm_movements_count += 1
-                if not arm_up:
-                    arm_up = True
-            else:
-                arm_up = False
+            if pose_results.pose_landmarks:
+                mp_drawing.draw_landmarks(
+                    frame, pose_results.pose_landmarks, mp_pose.POSE_CONNECTIONS,
+                    landmark_drawing_spec=mp_drawing_styles.get_default_pose_landmarks_style())
                 
-            # Verificar se existe posição dos braços em T
-            if recognize_T_posture(pose_results.pose_landmarks.landmark):
-                if not t_posture:
-                    t_posture = True
-                    t_posture_count += 1
-            else:
-                t_posture = False
+                # Verificar se o braço está levantado
+                if is_arm_up(pose_results.pose_landmarks.landmark):
+                    arm_movements_count += 1
+                    if not arm_up:
+                        arm_up = True
+                else:
+                    arm_up = False
+                    
+                # Verificar se existe posição dos braços em T
+                if recognize_T_posture(pose_results.pose_landmarks.landmark):
+                    if not t_posture:
+                        t_posture = True
+                        t_posture_count += 1
+                else:
+                    t_posture = False
+                
+                posture = recognize_posture(pose_results.pose_landmarks)
+                if posture not in detectes_postures:
+                    detectes_postures.append(posture)
+                    
+            if holistic_results.left_hand_landmarks:
+                mp_drawing.draw_landmarks(
+                    frame, holistic_results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS,
+                    landmark_drawing_spec=mp_drawing_styles.get_default_hand_landmarks_style())
+                
+            if holistic_results.right_hand_landmarks:
+                mp_drawing.draw_landmarks(
+                    frame, holistic_results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS,
+                    landmark_drawing_spec=mp_drawing_styles.get_default_hand_landmarks_style())
+                    
+            # Recognize gesture
+            if holistic_results.right_hand_landmarks:
+                gesture = recognize_gesture(holistic_results.right_hand_landmarks.landmark)
+                if gesture not in detectes_hand_gestures:
+                    detectes_hand_gestures.append(gesture)
+                    
+            # Converte o frame para escala de cinza para detecção de rosto
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            gray = cv2.equalizeHist(gray)
+            gray = cv2.GaussianBlur(gray, (5, 5), 0)
             
-            posture = recognize_posture(pose_results.pose_landmarks)
-            if posture not in detectes_postures:
-                detectes_postures.append(posture)
-                
-        if holistic_results.left_hand_landmarks:
-            mp_drawing.draw_landmarks(
-                frame, holistic_results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS,
-                landmark_drawing_spec=mp_drawing_styles.get_default_hand_landmarks_style())
+            # Calculate absolute difference between current frame and previous frame
+            frame_diff = cv2.absdiff(prev_frame, gray)
             
-        if holistic_results.right_hand_landmarks:
-            mp_drawing.draw_landmarks(
-                frame, holistic_results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS,
-                landmark_drawing_spec=mp_drawing_styles.get_default_hand_landmarks_style())
-                
-        # Recognize gesture
-        if holistic_results.right_hand_landmarks:
-            gesture = recognize_gesture(holistic_results.right_hand_landmarks.landmark)
-            if gesture not in detectes_hand_gestures:
-                detectes_hand_gestures.append(gesture)
-                
-         # Converte o frame para escala de cinza para detecção de rosto
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        gray = cv2.equalizeHist(gray)
-        gray = cv2.GaussianBlur(gray, (5, 5), 0)
-        
-        # Calculate absolute difference between current frame and previous frame
-        frame_diff = cv2.absdiff(prev_frame, gray)
-        
-        # Thresholding to highlight significant differences
-        _, thresh = cv2.threshold(frame_diff, threshold, 255, cv2.THRESH_BINARY)
-        
-        # Finding contours to detect regions with large movement
-        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
-        for contour in contours:
-            if cv2.contourArea(contour) > area_threshold:
-                counter_sudden_movements_detected += 1
-                (xT, yT, wT, hT) = cv2.boundingRect(contour)
-                cv2.rectangle(frame, (xT, yT), (xT + wT, yT + hT), (0, 255, 0), 2)
-                
-        # Update previous frame
-        prev_frame = gray
+            # Thresholding to highlight significant differences
+            _, thresh = cv2.threshold(frame_diff, threshold, 255, cv2.THRESH_BINARY)
+            
+            # Finding contours to detect regions with large movement
+            contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
+            # Identifica os momentos de movimentos anomalos
+            for contour in contours:
+                if cv2.contourArea(contour) > area_threshold:
+                    if not sudden_movements_detected:
+                        sudden_movements_detected = True
+                        counter_sudden_movements_detected += 1
+                        (xT, yT, wT, hT) = cv2.boundingRect(contour)
+                        cv2.rectangle(frame, (xT, yT), (xT + wT, yT + hT), (0, 255, 0), 2)
+                else:
+                    sudden_movements_detected = False
+                    
+            # Update previous frame
+            prev_frame = gray
 
-        # Escrever o frame processado no vídeo de saída
+            # Escrever o frame processado no vídeo de saída
         out.write(frame)
 
     # Criando um dicionario para imprimir os resultados
     resultsToReport = {
-        "Total de frames analisados": total_frames,
+        "Total de frames analisados": total_frame_analyzed,
         "Total de maos erguidas contabilizadas": arm_movements_count,
         "Principais emocoes detectadas": detectes_emotions_list,
         "Quantidade de emocoes detectadas": len(detectes_emotions_list),
@@ -291,4 +306,4 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 # detect_emotions_and_pose(os.path.join(script_dir, 'videos_input/cadeira_teste.mp4'))
 detect_emotions_and_pose(os.path.join(script_dir, 'videos_input/teste_movimentos.mp4'))
 # detect_emotions_and_pose(os.path.join(script_dir, 'videos_input/big_t_body_test.mp4'))
-# detect_emotions_and_pose(os.path.join(script_dir, 'videos_input/video.mp4'))
+# detect_emotions_and_pose(os.path.join(script_dir, 'videos_input/video.mp4'), False)
