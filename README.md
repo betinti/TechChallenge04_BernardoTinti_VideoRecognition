@@ -4,7 +4,7 @@ Este script em Python processa vídeos para realizar detecções de emoções, g
 
 ## Apresentação em Vídeo
 
-- [Video de explicação do código e funcionalidades](https://youtu.be/45IzncY4D_Q)
+- [Video de explicação do código e funcionalidades](https://youtu.be/oJmkRIkP3GQ)
 
 ## Funcionalidades
 
