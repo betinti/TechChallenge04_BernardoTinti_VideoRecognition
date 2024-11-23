@@ -2,6 +2,10 @@
 
 Este script em Python processa vídeos para realizar detecções de emoções, gestos, posturas corporais e movimentos bruscos. Ele utiliza bibliotecas avançadas de visão computacional e aprendizado de máquina, como OpenCV, Mediapipe e DeepFace, para analisar quadros de vídeo e gerar relatórios detalhados sobre os resultados.
 
+## Apresentação em Vídeo
+
+- [Video de explicação do código e funcionalidades](https://youtu.be/45IzncY4D_Q)
+
 ## Funcionalidades
 
 - **Detecção de emoções**: Reconhece emoções dominantes em rostos detectados.
@@ -19,6 +23,12 @@ Antes de executar o script, instale as bibliotecas necessárias. Você pode faze
 pip install opencv-python mediapipe deepface tqdm
 
 ```
+
+Além disso, é importante se certificar que tenha um vídeo no formato .mp4 para ser analisado.
+
+### Privacidade
+
+Importante ressaltar que o video analisado não será compartilhado com nenhuma entidade terceira, permanecendo apenas no computador de execução.
 
 ## Estrutura de Diretórios
 

@@ -143,6 +143,8 @@ def detect_emotions_and_pose(video_path, optimized = False):
     sudden_movements_detected = False
     total_frame_counter = 0
     total_frame_analyzed = 0
+    
+    # Parametro para definir o intervalo de analise entre frames em modo de otimizado
     intervalo_entre_frames = 15
     
     # Parametros para definir a detecção de movimentos brusos
@@ -232,9 +234,9 @@ def detect_emotions_and_pose(video_path, optimized = False):
                 
                 # Verificar se o braço está levantado
                 if is_arm_up(pose_results.pose_landmarks.landmark):
-                    arm_movements_count += 1
                     if not arm_up:
                         arm_up = True
+                        arm_movements_count += 1
                 else:
                     arm_up = False
                     
@@ -255,13 +257,12 @@ def detect_emotions_and_pose(video_path, optimized = False):
                     frame, holistic_results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS,
                     landmark_drawing_spec=mp_drawing_styles.get_default_hand_landmarks_style())
                 
+            # Reconhecer gestos
             if holistic_results.right_hand_landmarks:
                 mp_drawing.draw_landmarks(
                     frame, holistic_results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS,
                     landmark_drawing_spec=mp_drawing_styles.get_default_hand_landmarks_style())
-                    
-            # Reconhecer gestos
-            if holistic_results.right_hand_landmarks:
+            
                 gesture = recognize_gesture(holistic_results.right_hand_landmarks.landmark)
                 if gesture not in detectes_hand_gestures:
                     detectes_hand_gestures.append(gesture)
@@ -320,9 +321,7 @@ def detect_emotions_and_pose(video_path, optimized = False):
 # Caminho para o arquivo de vídeo na mesma pasta do script
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
-# video_name = "teste_movimento"
 # video_name = "cadeira_teste"
-# video_name = "big_t_body_test"
 video_name = "video"
 
 # Chamar a função para detectar emoções no vídeo e salvar o vídeo processado

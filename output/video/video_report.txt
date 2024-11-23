@@ -5,4 +5,4 @@ Quantidade de emocoes detectadas: 6
 Gestos de mao detectadas: Aceno de mao, Dedao para cima
 Posicoes corporais detectadas: Sentado, Em pe
 Posicao dos bracos em T: 17
-Movimentos anomalos: 2495
+Movimentos anomalos: 2498
