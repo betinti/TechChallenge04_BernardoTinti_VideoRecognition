@@ -320,8 +320,10 @@ def detect_emotions_and_pose(video_path, optimized = False):
 # Caminho para o arquivo de vídeo na mesma pasta do script
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
+# video_name = "teste_movimento"
+# video_name = "cadeira_teste"
+# video_name = "big_t_body_test"
+video_name = "video"
+
 # Chamar a função para detectar emoções no vídeo e salvar o vídeo processado
-# detect_emotions_and_pose(os.path.join(script_dir, 'videos_input/cadeira_teste.mp4'))
-detect_emotions_and_pose(os.path.join(script_dir, 'videos_input/teste_movimentos.mp4'))
-# detect_emotions_and_pose(os.path.join(script_dir, 'videos_input/big_t_body_test.mp4'))
-# detect_emotions_and_pose(os.path.join(script_dir, 'videos_input/video.mp4'), False)
+detect_emotions_and_pose(os.path.join(script_dir, f'videos_input/{video_name}.mp4'))
